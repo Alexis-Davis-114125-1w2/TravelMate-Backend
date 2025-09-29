@@ -8,7 +8,9 @@ import TravelMate_Backend.demo.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
@@ -23,11 +25,18 @@ public class TripServices {
     @Autowired
     private UserRepository userRepository;
 
-    public Trip createTrip(TripCreate tripDto, Long userId) {
+    public Trip createTrip(TripCreate tripDto, Long userId, MultipartFile imageFile) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         Trip trip = new Trip();
+        if (imageFile != null && !imageFile.isEmpty()) {
+            try {
+                trip.setImage(imageFile.getBytes());
+            } catch (IOException e) {
+                throw new RuntimeException("Error al procesar la imagen", e);
+            }
+        }
         MockTrip(tripDto, trip);
 
         trip = tripRepository.save(trip);
@@ -60,6 +69,7 @@ public class TripServices {
         if (alreadyParticipates) {
             throw new RuntimeException("El usuario ya participa en este viaje");
         }
+
 
         newUser.addTrip(trip);
         userRepository.save(newUser);
@@ -101,7 +111,7 @@ public class TripServices {
         trip.setDateI(tripDto.getDateI());
         trip.setDateF(tripDto.getDateF());
         trip.setCost(tripDto.getCost() != null ? tripDto.getCost() : BigDecimal.ZERO);
-        trip.setImage(tripDto.getImage());
+        //trip.setImage(tripDto.getImage());
     }
 
     public Trip getTripById(Long tripId, Long userId) {

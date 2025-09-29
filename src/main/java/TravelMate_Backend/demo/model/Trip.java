@@ -40,7 +40,7 @@ public class Trip {
     private BigDecimal cost;
 
     @Column(name = "image")
-    private String image;
+    private byte[] image;
 
     @Transient
     private String status;

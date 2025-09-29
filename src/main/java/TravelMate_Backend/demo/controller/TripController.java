@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -28,9 +29,11 @@ public class TripController {
         return ResponseEntity.ok(trips);
     }
     @PostMapping("/add")
-    public ResponseEntity<?> addTrip(@RequestBody TripCreate trip, @RequestParam Long userId) {
+    public ResponseEntity<?> addTrip(@RequestPart("trip") TripCreate trip,
+                                     @RequestPart(value = "image", required = false) MultipartFile imageFile,
+                                     @RequestParam Long userId) {
         try {
-            Trip trip1 = tripServices.createTrip(trip, userId);
+            Trip trip1 = tripServices.createTrip(trip, userId,imageFile);
             return ResponseEntity.ok(trip1);
         }catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
