@@ -45,8 +45,24 @@ public class Trip {
     @Transient
     private String status;
 
-    @ManyToMany(mappedBy = "trips", fetch = FetchType.LAZY)
+    @ManyToMany
+    @JoinTable(
+            name = "users_trip",
+            joinColumns = @JoinColumn(name = "trip_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
     private Set<User> users = new HashSet<>();
+
+    @ManyToMany
+    @JoinTable(
+            name = "trip_destinations",
+            joinColumns = @JoinColumn(name = "trip_id"),
+            inverseJoinColumns = @JoinColumn(name = "destination_id")
+    )
+    private Set<Destination> destinations = new HashSet<>();
+
+    @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<Wallet> wallets = new HashSet<>();
 
     public Trip(String name, String description, LocalDate dateI, LocalDate dateF, BigDecimal cost) {
         this.name = name;
