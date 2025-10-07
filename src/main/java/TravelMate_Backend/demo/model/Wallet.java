@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -22,14 +23,17 @@ public class Wallet {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trip_id")
+    @JsonIgnore
     private Trip trip;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "destination_id")
+    @JsonIgnore
     private Destination destination;
 
     @Column(name = "amount_spent", nullable = false, precision = 12, scale = 2)

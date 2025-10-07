@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -63,9 +64,11 @@ public class User implements UserDetails {
     private LocalDateTime updatedAt;
 
     @ManyToMany(mappedBy = "users")
+    @JsonIgnore
     private Set<Trip> trips = new HashSet<>();
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private Set<Wallet> wallets = new HashSet<>();
     
     @PrePersist

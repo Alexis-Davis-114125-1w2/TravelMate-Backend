@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -39,9 +40,11 @@ public class Destination {
     @Column(name = "cost", precision = 12, scale = 2)
     private BigDecimal cost = BigDecimal.ZERO;
 
-    @ManyToMany(mappedBy = "destinations")
-    private Set<Trip> trips = new HashSet<>();
+    @OneToMany(mappedBy = "destination", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private Set<TripDestination> tripDestinations = new HashSet<>();
 
     @OneToMany(mappedBy = "destination", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private Set<Wallet> wallets = new HashSet<>();
 }

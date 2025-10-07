@@ -30,7 +30,6 @@ public class TripCreate {
     @DecimalMin(value = "0.0", inclusive = true, message = "El costo no puede ser negativo")
     private BigDecimal cost;
 
-    private byte[] image;
     private String status;
 
     @AssertTrue(message = "La fecha de fin debe ser posterior a la fecha de inicio")

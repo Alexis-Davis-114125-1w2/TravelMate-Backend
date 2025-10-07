@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -51,17 +52,15 @@ public class Trip {
             joinColumns = @JoinColumn(name = "trip_id"),
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
+    @JsonIgnore
     private Set<User> users = new HashSet<>();
 
-    @ManyToMany
-    @JoinTable(
-            name = "trip_destinations",
-            joinColumns = @JoinColumn(name = "trip_id"),
-            inverseJoinColumns = @JoinColumn(name = "destination_id")
-    )
-    private Set<Destination> destinations = new HashSet<>();
+    @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private Set<TripDestination> tripDestinations = new HashSet<>();
 
     @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private Set<Wallet> wallets = new HashSet<>();
 
     public Trip(String name, String description, LocalDate dateI, LocalDate dateF, BigDecimal cost) {
