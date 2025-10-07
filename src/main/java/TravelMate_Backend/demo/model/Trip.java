@@ -46,7 +46,7 @@ public class Trip {
     @Transient
     private String status;
 
-    @ManyToMany
+    @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "users_trip",
             joinColumns = @JoinColumn(name = "trip_id"),

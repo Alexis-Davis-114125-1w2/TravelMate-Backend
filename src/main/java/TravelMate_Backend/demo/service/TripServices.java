@@ -41,11 +41,12 @@ public class TripServices {
 
         trip = tripRepository.save(trip);
 
-        user.addTrip(trip);
+        trip.getUsers().add(user);
+        user.getTrips().add(trip);
+        tripRepository.save(trip);
         userRepository.save(user);
 
         trip.setStatus(determineStatus(trip));
-
 
         return trip;
     }
@@ -71,7 +72,8 @@ public class TripServices {
         }
 
 
-        newUser.addTrip(trip);
+        trip.getUsers().add(newUser);
+        newUser.getTrips().add(trip);
         userRepository.save(newUser);
     }
 
@@ -89,7 +91,8 @@ public class TripServices {
             }
         }
 
-        userToRemove.removeTrip(trip);
+        trip.getUsers().remove(userToRemove);
+        userToRemove.getTrips().remove(trip);
         userRepository.save(userToRemove);
 
         if (trip.getUsers().isEmpty()) {
