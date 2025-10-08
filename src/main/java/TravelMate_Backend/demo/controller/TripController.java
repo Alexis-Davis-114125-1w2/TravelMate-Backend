@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,10 +34,23 @@ public class TripController {
                                      @RequestPart(value = "image", required = false) MultipartFile imageFile,
                                      @RequestParam Long userId) {
         try {
-            Trip trip1 = tripServices.createTrip(trip, userId,imageFile);
+            System.out.println("TripController.addTrip - Recibiendo request");
+            System.out.println("Trip data: " + trip);
+            System.out.println("User ID: " + userId);
+            
+            Trip trip1 = tripServices.createTrip(trip, userId, imageFile);
+            System.out.println("Trip creado exitosamente con ID: " + trip1.getId());
+            
             return ResponseEntity.ok(trip1);
-        }catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Error en TripController.addTrip: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Devolver un JSON con el error
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error al crear el viaje");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 

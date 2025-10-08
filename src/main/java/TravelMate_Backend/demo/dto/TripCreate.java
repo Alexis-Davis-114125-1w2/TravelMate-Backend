@@ -31,6 +31,27 @@ public class TripCreate {
     private BigDecimal cost;
 
     private String status;
+    
+    // Campos para origen y destino
+    private String origin;
+    private String destination;
+    private String vehicle;
+    
+    // Campos para Google Maps
+    private String originAddress;
+    private String destinationAddress;
+    private Coords originCoords;
+    private Coords destinationCoords;
+    private String transportMode;
+    
+    // Clase interna para coordenadas
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Coords {
+        private double lat;
+        private double lng;
+    }
 
     @AssertTrue(message = "La fecha de fin debe ser posterior a la fecha de inicio")
     public boolean isValidDateRange() {

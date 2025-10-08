@@ -1,10 +1,12 @@
 package TravelMate_Backend.demo.service;
 
 import TravelMate_Backend.demo.dto.TripCreate;
-import TravelMate_Backend.demo.model.Trip;
-import TravelMate_Backend.demo.model.User;
+import TravelMate_Backend.demo.model.*;
 import TravelMate_Backend.demo.repository.TripRepository;
 import TravelMate_Backend.demo.repository.UserRepository;
+import TravelMate_Backend.demo.repository.DestinationRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,12 @@ public class TripServices {
 
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private DestinationRepository destinationRepository;
+    
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public Trip createTrip(TripCreate tripDto, Long userId, MultipartFile imageFile) {
         User user = userRepository.findById(userId)
@@ -41,8 +49,12 @@ public class TripServices {
         MockTrip(tripDto, trip);
 
         Trip savedTrip = tripRepository.save(trip);
-        user.getTrips().add(savedTrip);
-        userRepository.save(user);
+        
+        // Crear la relación usuario-viaje usando SQL directo para evitar ConcurrentModificationException
+        createUserTripRelation(userId, savedTrip.getId());
+        
+        // Crear TripDestination para origen y destino si están disponibles (después de guardar el trip)
+        createTripDestinations(savedTrip, tripDto);
 
         trip.setStatus(determineStatus(trip));
 
@@ -165,6 +177,119 @@ public class TripServices {
             return "planning";
         } else {
             return "active";
+        }
+    }
+    
+    private void createTripDestinations(Trip trip, TripCreate tripDto) {
+        try {
+            // Solo crear TripDestination si tenemos tanto origen como destino
+            if (tripDto.getDestination() != null && !tripDto.getDestination().trim().isEmpty() &&
+                tripDto.getOrigin() != null && !tripDto.getOrigin().trim().isEmpty()) {
+                
+                // Crear destino principal
+                Destination destination = findOrCreateDestination(tripDto.getDestination());
+                
+                // Crear un solo TripDestination con origen y destino
+                createTripDestinationWithOriginAndDestination(trip, destination, tripDto);
+            } else {
+                System.out.println("No se crean TripDestinations: faltan origen o destino");
+            }
+        } catch (Exception e) {
+            System.err.println("Error creando TripDestinations: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private Destination findOrCreateDestination(String destinationName) {
+        // Buscar destino existente
+        Optional<Destination> existingDestination = destinationRepository.findByName(destinationName);
+        
+        if (existingDestination.isPresent()) {
+            return existingDestination.get();
+        }
+        
+        // Crear nuevo destino
+        Destination newDestination = new Destination();
+        newDestination.setName(destinationName);
+        newDestination.setCountry(extractCountry(destinationName));
+        newDestination.setCost(BigDecimal.ZERO);
+        
+        return destinationRepository.save(newDestination);
+    }
+    
+    private void createTripDestinationWithOriginAndDestination(Trip trip, Destination destination, TripCreate tripDto) {
+        TripDestination tripDestination = new TripDestination();
+        
+        // Crear ID compuesto
+        TripDestinationId id = new TripDestinationId();
+        id.setTripId(trip.getId());
+        id.setDestinationId(destination.getId());
+        tripDestination.setId(id);
+        
+        // Configurar relaciones
+        tripDestination.setTrip(trip);
+        tripDestination.setDestination(destination);
+        
+        // Configurar modo de transporte
+        String transportMode = tripDto.getVehicle() != null ? tripDto.getVehicle() : "auto";
+        tripDestination.setTransportMode(transportMode);
+        
+        // Configurar datos de origen (obligatorio para validación)
+        if (tripDto.getOriginAddress() != null) {
+            tripDestination.setOriginAddress(tripDto.getOriginAddress());
+        } else {
+            tripDestination.setOriginAddress(tripDto.getOrigin()); // Usar el nombre como fallback
+        }
+        
+        if (tripDto.getOriginCoords() != null) {
+            tripDestination.setOriginLatitude(new BigDecimal(tripDto.getOriginCoords().getLat()));
+            tripDestination.setOriginLongitude(new BigDecimal(tripDto.getOriginCoords().getLng()));
+        }
+        
+        // Configurar datos de destino (obligatorio para validación)
+        if (tripDto.getDestinationAddress() != null) {
+            tripDestination.setDestinationAddress(tripDto.getDestinationAddress());
+        } else {
+            tripDestination.setDestinationAddress(tripDto.getDestination()); // Usar el nombre como fallback
+        }
+        
+        if (tripDto.getDestinationCoords() != null) {
+            tripDestination.setDestinationLatitude(new BigDecimal(tripDto.getDestinationCoords().getLat()));
+            tripDestination.setDestinationLongitude(new BigDecimal(tripDto.getDestinationCoords().getLng()));
+        }
+        
+        // Guardar el TripDestination directamente en la base de datos
+        try {
+            entityManager.persist(tripDestination);
+            entityManager.flush();
+            System.out.println("TripDestination creado exitosamente con origen y destino");
+        } catch (Exception e) {
+            System.err.println("Error guardando TripDestination: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private String extractCountry(String destinationName) {
+        // Extraer país del nombre del destino (última parte después de la coma)
+        String[] parts = destinationName.split(",");
+        if (parts.length > 1) {
+            return parts[parts.length - 1].trim();
+        }
+        return "Unknown";
+    }
+    
+    private void createUserTripRelation(Long userId, Long tripId) {
+        try {
+            // Crear la relación usuario-viaje usando SQL directo
+            String sql = "INSERT INTO users_trip (user_id, trip_id) VALUES (?, ?)";
+            entityManager.createNativeQuery(sql)
+                    .setParameter(1, userId)
+                    .setParameter(2, tripId)
+                    .executeUpdate();
+            System.out.println("Relación usuario-viaje creada: userId=" + userId + ", tripId=" + tripId);
+        } catch (Exception e) {
+            System.err.println("Error creando relación usuario-viaje: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

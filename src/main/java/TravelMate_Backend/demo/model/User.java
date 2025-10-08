@@ -39,8 +39,6 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
     
-    @NotBlank(message = "La contraseña es obligatoria")
-    @Size(min = 6, message = "La contraseña debe tener al menos 6 caracteres")
     @Column(nullable = false)
     private String password;
     

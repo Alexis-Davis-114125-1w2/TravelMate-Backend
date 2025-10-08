@@ -4,9 +4,13 @@ import TravelMate_Backend.demo.security.AuthTokenFilter;
 import TravelMate_Backend.demo.security.JwtUtils;
 import TravelMate_Backend.demo.service.UserDetailsServiceImpl;
 import TravelMate_Backend.demo.service.OAuth2UserService;
+import TravelMate_Backend.demo.service.AuthService;
+import TravelMate_Backend.demo.model.User;
+import TravelMate_Backend.demo.model.AuthProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -36,6 +40,14 @@ public class SecurityConfig {
     @Autowired
     private OAuth2UserService oAuth2UserService;
     
+    public SecurityConfig() {
+        System.out.println("SecurityConfig constructor - OAuth2UserService será inyectado");
+    }
+    
+    @Autowired
+    @Lazy
+    private AuthService authService;
+    
     @Autowired
     private JwtUtils jwtUtils;
     
@@ -46,9 +58,8 @@ public class SecurityConfig {
     
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(passwordEncoder());
         authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }
     
@@ -64,6 +75,8 @@ public class SecurityConfig {
     
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        System.out.println("SecurityConfig.filterChain - OAuth2UserService: " + (oAuth2UserService != null ? "INYECTADO" : "NULL"));
+        
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -71,6 +84,9 @@ public class SecurityConfig {
                 auth.requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers("/api/test/**").permitAll()
                     .requestMatchers("/oauth2/**").permitAll()
+                    .requestMatchers("/api/oauth2/**").permitAll()
+                    .requestMatchers("/api/trips/add").authenticated()
+                    .requestMatchers("/api/trips/get/**").authenticated()
                     .requestMatchers("/api/trips/**").permitAll()
                     .requestMatchers("/login/oauth2/code/**").permitAll()
                     // Swagger/OpenAPI endpoints
@@ -83,12 +99,67 @@ public class SecurityConfig {
                 .userInfoEndpoint(userInfo -> userInfo
                     .userService(oAuth2UserService)
                 )
+                .defaultSuccessUrl("http://localhost:3000/auth/callback", true)
                 .successHandler((request, response, authentication) -> {
                     try {
-                        String token = generateTokenForUser(authentication);
-                        String redirectUrl = "http://localhost:3000/auth/callback?token=" + token;
-                        response.sendRedirect(redirectUrl);
+                        System.out.println("OAuth2 Success Handler - Authentication: " + authentication.getName());
+                        
+                        // Obtener el usuario de la autenticación
+                        Object principal = authentication.getPrincipal();
+                        System.out.println("Principal type: " + principal.getClass().getName());
+                        
+                        String email = null;
+                        org.springframework.security.oauth2.core.user.OAuth2User oauth2User = null;
+                        if (principal instanceof org.springframework.security.oauth2.core.user.OAuth2User) {
+                            oauth2User = (org.springframework.security.oauth2.core.user.OAuth2User) principal;
+                            email = oauth2User.getAttribute("email");
+                            System.out.println("OAuth2 User email: " + email);
+                        }
+                        
+                        if (email != null) {
+                            System.out.println("Procesando usuario OAuth2 con email: " + email);
+                            
+                            // Buscar el usuario en la base de datos
+                            User user = authService.findByEmail(email).orElse(null);
+                            
+                            if (user == null) {
+                                System.out.println("Usuario no existe, creando nuevo usuario OAuth2...");
+                                
+                                // Crear nuevo usuario OAuth2
+                                user = new User();
+                                user.setName(oauth2User.getAttribute("name") != null ? 
+                                    oauth2User.getAttribute("name") : email.split("@")[0]);
+                                user.setEmail(email);
+                                user.setGoogleId(oauth2User.getAttribute("sub"));
+                                user.setProfilePictureUrl(oauth2User.getAttribute("picture"));
+                                user.setProvider(AuthProvider.GOOGLE);
+                                user.setEmailVerified(true);
+                                user.setPassword("OAUTH2_USER_PASSWORD");
+                                
+                                System.out.println("Guardando nuevo usuario OAuth2...");
+                                user = authService.save(user);
+                                System.out.println("Usuario OAuth2 creado con ID: " + user.getId());
+                            } else {
+                                System.out.println("Usuario existente encontrado: " + user.getName() + " (ID: " + user.getId() + ")");
+                            }
+                            
+                            // Generar token y redirigir
+                            String token = authService.generateTokenForUser(user);
+                            System.out.println("Token generado para OAuth2: " + token.substring(0, 20) + "...");
+                            
+                            // Redirigir con el token
+                            String redirectUrl = "http://localhost:3000/auth/callback?token=" + token;
+                            System.out.println("Redirigiendo a: " + redirectUrl);
+                            response.sendRedirect(redirectUrl);
+                            return;
+                        }
+                        
+                        // Si no se puede obtener el usuario, redirigir a error
+                        System.err.println("No se pudo obtener usuario OAuth2");
+                        response.sendRedirect("http://localhost:3000/login/error?error=oauth2_user_not_found");
                     } catch (Exception e) {
+                        System.err.println("Error en OAuth2 Success Handler: " + e.getMessage());
+                        e.printStackTrace();
                         response.sendRedirect("http://localhost:3000/login/error?error=oauth2_error");
                     }
                 })
