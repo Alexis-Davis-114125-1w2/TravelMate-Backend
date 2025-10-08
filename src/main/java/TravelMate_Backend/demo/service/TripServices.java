@@ -6,6 +6,7 @@ import TravelMate_Backend.demo.model.User;
 import TravelMate_Backend.demo.repository.TripRepository;
 import TravelMate_Backend.demo.repository.UserRepository;
 import jakarta.transaction.Transactional;
+import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -39,11 +40,8 @@ public class TripServices {
         }
         MockTrip(tripDto, trip);
 
-        trip = tripRepository.save(trip);
-
-        trip.getUsers().add(user);
-        user.getTrips().add(trip);
-        tripRepository.save(trip);
+        Trip savedTrip = tripRepository.save(trip);
+        user.getTrips().add(savedTrip);
         userRepository.save(user);
 
         trip.setStatus(determineStatus(trip));
@@ -52,12 +50,21 @@ public class TripServices {
     }
 
     public List<Trip> getUserTrips(Long userId) {
-        User user = userRepository.findById(userId)
+        // Verificar que el usuario existe
+        userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return user.getTrips().stream().peek(trip -> trip.setStatus(determineStatus(trip)))
+
+        // Query directa a los trips del usuario
+        List<Trip> trips = tripRepository.findByUsersId(userId);
+
+        return trips.stream()
+                .map(trip -> {
+                    trip.setStatus(determineStatus(trip));
+                    return trip;
+                })
                 .collect(Collectors.toList());
     }
-
+    //TODO sin probar
     public void addUserToTrip(Long newUserId, Long tripId, Long currentUserId) {
         Trip trip = getTripById(tripId, currentUserId);
 
@@ -71,12 +78,10 @@ public class TripServices {
             throw new RuntimeException("El usuario ya participa en este viaje");
         }
 
-
-        trip.getUsers().add(newUser);
         newUser.getTrips().add(trip);
         userRepository.save(newUser);
     }
-
+    //TODO tampoco probe
     public void removeUserFromTrip(Long userToRemoveId, Long tripId, Long currentUserId) {
         Trip trip = getTripById(tripId, currentUserId);
 
@@ -91,15 +96,17 @@ public class TripServices {
             }
         }
 
-        trip.getUsers().remove(userToRemove);
         userToRemove.getTrips().remove(trip);
         userRepository.save(userToRemove);
 
-        if (trip.getUsers().isEmpty()) {
-            tripRepository.delete(trip);
+        tripRepository.flush();
+        Trip refreshedTrip = tripRepository.findById(tripId).orElse(null);
+
+        if (refreshedTrip != null && refreshedTrip.getUsers().isEmpty()) {
+            tripRepository.delete(refreshedTrip);
         }
     }
-
+    //TODO no Probe
     public Trip updateTrip(Long tripId, TripCreate tripDto, Long userId) {
         Trip trip = getTripById(tripId, userId);
         MockTrip(tripDto, trip);
@@ -121,12 +128,13 @@ public class TripServices {
         Trip trip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new RuntimeException("Viaje no encontrado"));
 
-        boolean userParticipates = trip.getUsers().stream()
-                .anyMatch(user -> user.getId().equals(userId));
+        boolean userParticipates = tripRepository.existsByIdAndUsersId(tripId, userId);
 
         if (!userParticipates) {
             throw new RuntimeException("No tienes acceso a este viaje");
         }
+        Set<User> users = userRepository.findByTripsId(tripId);
+        trip.setUsers(users);
 
         return trip;
     }
@@ -134,9 +142,11 @@ public class TripServices {
     public void deleteTrip(Long tripId, Long userId) {
         Trip trip = getTripById(tripId, userId);
 
-        // Remover todas las relaciones con usuarios
-        trip.getUsers().forEach(user -> user.getTrips().remove(trip));
-        trip.getUsers().clear();
+        List<User> usersToUpdate = new ArrayList<>(trip.getUsers());
+        for (User user : usersToUpdate) {
+            user.getTrips().remove(trip);
+            userRepository.save(user);
+        }
 
         tripRepository.delete(trip);
     }

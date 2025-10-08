@@ -3,9 +3,13 @@ package TravelMate_Backend.demo.repository;
 import TravelMate_Backend.demo.model.AuthProvider;
 import TravelMate_Backend.demo.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -19,4 +23,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Boolean existsByGoogleId(String googleId);
     
     Optional<User> findByEmailAndProvider(String email, AuthProvider provider);
+
+    Set<User> findByTripsId(Long tripsId);
 }
