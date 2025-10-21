@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.controller;
 
+import TravelMate_Backend.demo.dto.ApiResponse;
 import TravelMate_Backend.demo.dto.TripCreate;
 import TravelMate_Backend.demo.model.Trip;
 import TravelMate_Backend.demo.model.User;
@@ -159,6 +160,25 @@ public class TripController {
                     "success", false,
                     "message", e.getMessage()
             ));
+        }
+    }
+
+    @PostMapping("/join")
+    public ResponseEntity<ApiResponse> joinTripByCode(
+            @RequestParam String code,
+            @RequestParam Long userId) {
+        try {
+            tripServices.joinTripByCode(code, userId);
+
+            ApiResponse response = new ApiResponse(
+                    true,
+                    "Usuario unido exitosamente al viaje con código " + code
+            );
+            return ResponseEntity.ok(response);
+
+        } catch (RuntimeException e) {
+            ApiResponse response = new ApiResponse(false, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
     }
 }

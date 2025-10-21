@@ -37,6 +37,9 @@ public class Trip {
     @Column(name = "date_f", nullable = false)
     private LocalDate dateF;
 
+    @Column(unique = true)
+    private String joinCode;
+
     @Column(name = "cost", precision = 10, scale = 2)
     private BigDecimal cost;
 

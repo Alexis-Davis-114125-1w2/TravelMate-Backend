@@ -48,6 +48,9 @@ public class TripServices {
         }
         MockTrip(tripDto, trip);
 
+        String joinCode = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        trip.setJoinCode(joinCode);
+
         Trip savedTrip = tripRepository.save(trip);
         
         // Crear la relación usuario-viaje usando SQL directo para evitar ConcurrentModificationException
@@ -135,7 +138,7 @@ public class TripServices {
         trip.setCost(tripDto.getCost() != null ? tripDto.getCost() : BigDecimal.ZERO);
         //trip.setImage(tripDto.getImage());
     }
-
+    //Todo resolver a futuro
     public Trip getTripById(Long tripId, Long userId) {
         Trip trip = tripRepository.findById(tripId)
                 .orElseThrow(() -> new RuntimeException("Viaje no encontrado"));
@@ -145,8 +148,11 @@ public class TripServices {
         if (!userParticipates) {
             throw new RuntimeException("No tienes acceso a este viaje");
         }
-        Set<User> users = userRepository.findByTripsId(tripId);
-        trip.setUsers(users);
+        List<User> users = userRepository.findByTripsId(tripId);
+        for (User user : users) {
+            trip.getUsers().add(user);
+        }
+        //trip.setUsers(users);
 
         return trip;
     }
@@ -164,8 +170,18 @@ public class TripServices {
     }
 
     public List<User> getTripParticipants(Long tripId, Long userId) {
-        Trip trip = getTripById(tripId, userId);
-        return new ArrayList<>(trip.getUsers());
+        tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Viaje no encontrado"));
+
+        boolean userParticipates = tripRepository.existsByIdAndUsersId(tripId, userId);
+
+        if (!userParticipates) {
+            throw new RuntimeException("No tienes acceso a este viaje");
+        }
+        List<User> users = userRepository.findByTripsId(tripId);
+
+
+        return users;
     }
 
     private String determineStatus(Trip trip) {
@@ -291,6 +307,33 @@ public class TripServices {
             System.err.println("Error creando relación usuario-viaje: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    @Transactional
+    public void joinTripByCode(String code, Long userId) {
+        Trip trip = tripRepository.findByJoinCode(code)
+                .orElseThrow(() -> new RuntimeException("Código inválido o viaje no encontrado"));
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        boolean exists = entityManager.createNativeQuery(
+                        "SELECT COUNT(*) FROM users_trip WHERE user_id = ? AND trip_id = ?")
+                .setParameter(1, userId)
+                .setParameter(2, trip.getId())
+                .getSingleResult() != null &&
+                ((Number) entityManager.createNativeQuery(
+                                "SELECT COUNT(*) FROM users_trip WHERE user_id = ? AND trip_id = ?")
+                        .setParameter(1, userId)
+                        .setParameter(2, trip.getId())
+                        .getSingleResult()).intValue() > 0;
+
+        if (exists) {
+            throw new RuntimeException("El usuario ya está en este viaje");
+        }
+
+        createUserTripRelation(userId, trip.getId());
+        System.out.println("usuario guardado");
     }
 
     /*Estadisticas de viaje*/
