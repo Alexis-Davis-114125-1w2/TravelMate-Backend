@@ -1,6 +1,7 @@
 package TravelMate_Backend.demo.service;
 
 import TravelMate_Backend.demo.dto.TripCreate;
+import TravelMate_Backend.demo.dto.TripDetailsResponse;
 import TravelMate_Backend.demo.model.*;
 import TravelMate_Backend.demo.repository.TripRepository;
 import TravelMate_Backend.demo.repository.UserRepository;
@@ -140,21 +141,106 @@ public class TripServices {
     }
     //Todo resolver a futuro
     public Trip getTripById(Long tripId, Long userId) {
-        Trip trip = tripRepository.findById(tripId)
-                .orElseThrow(() -> new RuntimeException("Viaje no encontrado"));
-
-        boolean userParticipates = tripRepository.existsByIdAndUsersId(tripId, userId);
-
-        if (!userParticipates) {
+        System.out.println("TripServices.getTripById - Verificando acceso para tripId: " + tripId + ", userId: " + userId);
+        
+        // Usar la lógica que sabemos que funciona: obtener todos los viajes del usuario
+        List<Trip> userTrips = tripRepository.findByUsersId(userId);
+        System.out.println("TripServices.getTripById - Viajes del usuario: " + userTrips.size());
+        
+        // Buscar el viaje específico en la lista de viajes del usuario
+        Trip trip = userTrips.stream()
+                .filter(userTrip -> userTrip.getId().equals(tripId))
+                .findFirst()
+                .orElse(null);
+        
+        if (trip == null) {
+            System.out.println("TripServices.getTripById - Viaje no encontrado en los viajes del usuario");
             throw new RuntimeException("No tienes acceso a este viaje");
         }
-        List<User> users = userRepository.findByTripsId(tripId);
-        for (User user : users) {
-            trip.getUsers().add(user);
-        }
-        //trip.setUsers(users);
-
+        
+        System.out.println("TripServices.getTripById - Viaje encontrado: " + trip.getName());
+        System.out.println("TripServices.getTripById - Acceso concedido");
         return trip;
+    }
+
+    public TripDetailsResponse getTripDetails(Long tripId, Long userId) {
+        System.out.println("TripServices.getTripDetails - Iniciando para tripId: " + tripId + ", userId: " + userId);
+        Trip trip = getTripById(tripId, userId);
+        
+        // Crear la respuesta con los datos básicos del viaje
+        TripDetailsResponse response = new TripDetailsResponse();
+        response.setId(trip.getId());
+        response.setName(trip.getName());
+        response.setDescription(trip.getDescription());
+        response.setDateI(trip.getDateI());
+        response.setDateF(trip.getDateF());
+        response.setCost(trip.getCost());
+        response.setJoinCode(trip.getJoinCode());
+        response.setStatus(determineStatus(trip));
+        
+        // Cargar información de TripDestination de forma segura
+        try {
+            List<TripDestination> tripDestinations = loadTripDestinations(tripId);
+            if (!tripDestinations.isEmpty()) {
+                TripDestination tripDestination = tripDestinations.get(0); // Tomar el primero
+                
+                // Configurar información de transporte
+                response.setTransportMode(tripDestination.getTransportMode());
+                response.setVehicle(tripDestination.getTransportMode());
+                
+                // Configurar origen
+                if (tripDestination.getOriginAddress() != null) {
+                    response.setOrigin(tripDestination.getOriginAddress());
+                    response.setOriginAddress(tripDestination.getOriginAddress());
+                }
+                if (tripDestination.getOriginLatitude() != null) {
+                    response.setOriginLatitude(tripDestination.getOriginLatitude().doubleValue());
+                }
+                if (tripDestination.getOriginLongitude() != null) {
+                    response.setOriginLongitude(tripDestination.getOriginLongitude().doubleValue());
+                }
+                
+                // Configurar destino
+                if (tripDestination.getDestination() != null) {
+                    response.setDestination(tripDestination.getDestination().getName());
+                }
+                if (tripDestination.getDestinationAddress() != null) {
+                    response.setDestinationAddress(tripDestination.getDestinationAddress());
+                }
+                if (tripDestination.getDestinationLatitude() != null) {
+                    response.setDestinationLatitude(tripDestination.getDestinationLatitude().doubleValue());
+                }
+                if (tripDestination.getDestinationLongitude() != null) {
+                    response.setDestinationLongitude(tripDestination.getDestinationLongitude().doubleValue());
+                }
+                
+                System.out.println("TripServices.getTripDetails - Datos de TripDestination cargados:");
+                System.out.println("  - Origen: " + response.getOrigin());
+                System.out.println("  - Destino: " + response.getDestination());
+                System.out.println("  - Transporte: " + response.getTransportMode());
+                System.out.println("  - Coordenadas origen: " + response.getOriginLatitude() + ", " + response.getOriginLongitude());
+                System.out.println("  - Coordenadas destino: " + response.getDestinationLatitude() + ", " + response.getDestinationLongitude());
+            } else {
+                System.out.println("TripServices.getTripDetails - No se encontraron TripDestinations para el viaje");
+            }
+        } catch (Exception e) {
+            System.err.println("TripServices.getTripDetails - Error cargando TripDestinations: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        // Obtener participantes
+        List<User> participants = userRepository.findByTripsId(tripId);
+        List<TripDetailsResponse.ParticipantInfo> participantInfos = participants.stream()
+                .map(user -> new TripDetailsResponse.ParticipantInfo(
+                        user.getId(),
+                        user.getName(),
+                        user.getEmail(),
+                        null // No hay profilePicture en el modelo actual
+                ))
+                .collect(Collectors.toList());
+        response.setParticipants(participantInfos);
+        
+        return response;
     }
 
     public void deleteTrip(Long tripId, Long userId) {
@@ -292,6 +378,87 @@ public class TripServices {
             return parts[parts.length - 1].trim();
         }
         return "Unknown";
+    }
+    
+    private List<TripDestination> loadTripDestinations(Long tripId) {
+        try {
+            // Usar consulta más específica para evitar problemas
+            String sql = "SELECT origin_address, origin_latitude, origin_longitude, " +
+                        "destination_address, destination_latitude, destination_longitude, " +
+                        "transport_mode, destination_id FROM trip_destinations WHERE trip_id = ?";
+            List<Object[]> results = entityManager.createNativeQuery(sql)
+                    .setParameter(1, tripId)
+                    .getResultList();
+            
+            System.out.println("TripServices.loadTripDestinations - Consulta ejecutada para tripId: " + tripId);
+            System.out.println("TripServices.loadTripDestinations - Resultados encontrados: " + results.size());
+            
+            List<TripDestination> tripDestinations = new ArrayList<>();
+            
+            for (Object[] row : results) {
+                System.out.println("TripServices.loadTripDestinations - Procesando fila: " + java.util.Arrays.toString(row));
+                
+                TripDestination tripDestination = new TripDestination();
+                
+                // Crear ID compuesto
+                TripDestinationId id = new TripDestinationId();
+                id.setTripId(tripId);
+                id.setDestinationId(((Number) row[7]).longValue()); // destination_id
+                tripDestination.setId(id);
+                
+                // Mapear campos según la nueva consulta:
+                // 0: origin_address, 1: origin_latitude, 2: origin_longitude,
+                // 3: destination_address, 4: destination_latitude, 5: destination_longitude,
+                // 6: transport_mode, 7: destination_id
+                
+                if (row[0] != null) { // origin_address
+                    tripDestination.setOriginAddress((String) row[0]);
+                    System.out.println("TripServices.loadTripDestinations - Origin address: " + row[0]);
+                }
+                if (row[1] != null) { // origin_latitude
+                    tripDestination.setOriginLatitude(new BigDecimal(row[1].toString()));
+                    System.out.println("TripServices.loadTripDestinations - Origin latitude: " + row[1]);
+                }
+                if (row[2] != null) { // origin_longitude
+                    tripDestination.setOriginLongitude(new BigDecimal(row[2].toString()));
+                    System.out.println("TripServices.loadTripDestinations - Origin longitude: " + row[2]);
+                }
+                if (row[3] != null) { // destination_address
+                    tripDestination.setDestinationAddress((String) row[3]);
+                    System.out.println("TripServices.loadTripDestinations - Destination address: " + row[3]);
+                }
+                if (row[4] != null) { // destination_latitude
+                    tripDestination.setDestinationLatitude(new BigDecimal(row[4].toString()));
+                    System.out.println("TripServices.loadTripDestinations - Destination latitude: " + row[4]);
+                }
+                if (row[5] != null) { // destination_longitude
+                    tripDestination.setDestinationLongitude(new BigDecimal(row[5].toString()));
+                    System.out.println("TripServices.loadTripDestinations - Destination longitude: " + row[5]);
+                }
+                if (row[6] != null) { // transport_mode
+                    tripDestination.setTransportMode((String) row[6]);
+                    System.out.println("TripServices.loadTripDestinations - Transport mode: " + row[6]);
+                }
+                
+                // Cargar el destino relacionado
+                Long destinationId = ((Number) row[7]).longValue();
+                Destination destination = destinationRepository.findById(destinationId).orElse(null);
+                if (destination != null) {
+                    tripDestination.setDestination(destination);
+                    System.out.println("TripServices.loadTripDestinations - Destination name: " + destination.getName());
+                }
+                
+                tripDestinations.add(tripDestination);
+            }
+            
+            System.out.println("TripServices.loadTripDestinations - Cargados " + tripDestinations.size() + " TripDestinations");
+            return tripDestinations;
+            
+        } catch (Exception e) {
+            System.err.println("TripServices.loadTripDestinations - Error: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
     }
     
     private void createUserTripRelation(Long userId, Long tripId) {

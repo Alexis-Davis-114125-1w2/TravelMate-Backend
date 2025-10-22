@@ -1,18 +1,34 @@
 package TravelMate_Backend.demo.config;
 
 import TravelMate_Backend.demo.model.AuthProvider;
+import TravelMate_Backend.demo.model.Destination;
+import TravelMate_Backend.demo.model.Trip;
+import TravelMate_Backend.demo.model.TripDestination;
+import TravelMate_Backend.demo.model.TripDestinationId;
 import TravelMate_Backend.demo.model.User;
+import TravelMate_Backend.demo.repository.DestinationRepository;
+import TravelMate_Backend.demo.repository.TripRepository;
 import TravelMate_Backend.demo.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.Set;
+
 @Component
 public class DataInitializer implements CommandLineRunner {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private TripRepository tripRepository;
+    
+    @Autowired
+    private DestinationRepository destinationRepository;
     
     @Autowired
     private PasswordEncoder passwordEncoder;

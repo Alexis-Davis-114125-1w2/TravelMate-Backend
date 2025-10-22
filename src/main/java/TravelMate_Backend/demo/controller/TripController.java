@@ -2,6 +2,7 @@ package TravelMate_Backend.demo.controller;
 
 import TravelMate_Backend.demo.dto.ApiResponse;
 import TravelMate_Backend.demo.dto.TripCreate;
+import TravelMate_Backend.demo.dto.TripDetailsResponse;
 import TravelMate_Backend.demo.model.Trip;
 import TravelMate_Backend.demo.model.User;
 import TravelMate_Backend.demo.service.TripServices;
@@ -22,13 +23,30 @@ import java.util.Map;
 public class TripController {
     @Autowired
     private TripServices tripServices;
-    @GetMapping("/get/{userId}")
+    @GetMapping("/user/{userId}")
     public ResponseEntity<?> getTripsUser( @PathVariable Long userId) {
         List<Trip> trips = tripServices.getUserTrips(userId);
         if (trips.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(trips);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getTripById(@PathVariable Long id, @RequestParam Long userId) {
+        try {
+            System.out.println("TripController.getTripById - Recibiendo request para tripId: " + id + ", userId: " + userId);
+            TripDetailsResponse tripDetails = tripServices.getTripDetails(id, userId);
+            System.out.println("TripController.getTripById - Trip details obtenidos exitosamente");
+            return ResponseEntity.ok(tripDetails);
+        } catch (RuntimeException e) {
+            System.err.println("TripController.getTripById - Error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+        }
     }
     @PostMapping("/add")
     public ResponseEntity<?> addTrip(@RequestPart("trip") TripCreate trip,
@@ -69,10 +87,10 @@ public class TripController {
             ));
 
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "success", false,
-                    "message", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 
@@ -90,10 +108,10 @@ public class TripController {
             ));
 
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "success", false,
-                    "message", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 
@@ -112,10 +130,10 @@ public class TripController {
             ));
 
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "success", false,
-                    "message", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 
@@ -134,10 +152,10 @@ public class TripController {
             ));
 
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "success", false,
-                    "message", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 
@@ -156,10 +174,10 @@ public class TripController {
             ));
 
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "success", false,
-                    "message", e.getMessage()
-            ));
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 
