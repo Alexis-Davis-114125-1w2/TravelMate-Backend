@@ -61,6 +61,10 @@ public class Trip {
     @JsonIgnore
     private Set<Wallet> wallets = new HashSet<>();
 
+    @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private Set<Tip> tips = new HashSet<>();
+
     public Trip(String name, String description, LocalDate dateI, LocalDate dateF, BigDecimal cost) {
         this.name = name;
         this.description = description;

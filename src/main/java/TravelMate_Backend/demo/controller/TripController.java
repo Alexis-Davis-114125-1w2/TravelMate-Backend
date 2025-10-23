@@ -190,12 +190,13 @@ public class TripController {
 
             ApiResponse response = new ApiResponse(
                     true,
-                    "Usuario unido exitosamente al viaje con código " + code
+                    "Usuario unido exitosamente al viaje con código " + code,
+                    null
             );
             return ResponseEntity.ok(response);
 
         } catch (RuntimeException e) {
-            ApiResponse response = new ApiResponse(false, e.getMessage());
+            ApiResponse response = new ApiResponse(false, e.getMessage(), null);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
     }
