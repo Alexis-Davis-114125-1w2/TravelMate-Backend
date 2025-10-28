@@ -1,11 +1,10 @@
 package TravelMate_Backend.demo.controller;
 
-import TravelMate_Backend.demo.dto.AuthResponse;
-import TravelMate_Backend.demo.dto.LoginRequest;
-import TravelMate_Backend.demo.dto.RegisterRequest;
+import TravelMate_Backend.demo.dto.*;
 import TravelMate_Backend.demo.model.AuthProvider;
 import TravelMate_Backend.demo.model.User;
 import TravelMate_Backend.demo.service.AuthService;
+import TravelMate_Backend.demo.service.PasswordResetService;
 import TravelMate_Backend.demo.service.UserDetailsServiceImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +26,9 @@ public class AuthController {
     
     @Autowired
     private UserDetailsServiceImpl userDetailsService;
+
+    @Autowired
+    private PasswordResetService passwordResetService;
     
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
@@ -79,5 +81,60 @@ public class AuthController {
         Map<String, String> response = new HashMap<>();
         response.put("message", "Sesión cerrada exitosamente");
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody PasswordResetRequest request) {
+        try {
+            passwordResetService.initiatePasswordReset(request.getEmail());
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Se ha enviado un código de verificación a tu email");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PostMapping("/verify-reset-code")
+    public ResponseEntity<?> verifyResetCode(@Valid @RequestBody VerifyCodeRequest request) {
+        try {
+            boolean isValid = passwordResetService.verifyCode(request.getEmail(), request.getCode());
+
+            if (isValid) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Código verificado correctamente");
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, String> error = new HashMap<>();
+                error.put("message", "Código inválido");
+                return ResponseEntity.badRequest().body(error);
+            }
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody NewPasswordRequest request) {
+        try {
+            passwordResetService.resetPassword(
+                    request.getEmail(),
+                    request.getCode(),
+                    request.getNewPassword(),
+                    request.getConfirmPassword()
+            );
+
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Contraseña actualizada exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            Map<String, String> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
     }
 }
