@@ -51,6 +51,8 @@ public class TripServices {
 
         String joinCode = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         trip.setJoinCode(joinCode);
+        trip.setCreateBy(userId);
+        trip.setAdminIds(new HashSet<>(List.of(userId)));
 
         Trip savedTrip = tripRepository.save(trip);
         
@@ -80,7 +82,7 @@ public class TripServices {
                 })
                 .collect(Collectors.toList());
     }
-    //TODO sin probar
+
     public void addUserToTrip(Long newUserId, Long tripId, Long currentUserId) {
         Trip trip = getTripById(tripId, currentUserId);
 
@@ -177,6 +179,8 @@ public class TripServices {
         response.setCost(trip.getCost());
         response.setJoinCode(trip.getJoinCode());
         response.setStatus(determineStatus(trip));
+        response.setCreateBy(trip.getCreateBy());
+        response.setAdminIds(trip.getAdminIds());
         
         // Cargar información de TripDestination de forma segura
         try {
@@ -501,6 +505,21 @@ public class TripServices {
 
         createUserTripRelation(userId, trip.getId());
         System.out.println("usuario guardado");
+    }
+
+    public Trip addAdminId(Long userId, Long adminId, Long tripId) {
+        Trip trip = getTripById(tripId, userId);
+        trip.getAdminIds().add(adminId);
+        return tripRepository.save(trip);
+    }
+
+    public Trip removeAdminId(Long userId, Long adminId, Long tripId) {
+        Trip trip = getTripById(tripId, userId);
+        if (trip.getAdminIds().isEmpty()) {
+            throw new RuntimeException("No se puede eliminar el admin, porque no hay ninguno");
+        }
+        trip.getAdminIds().remove(adminId);
+        return tripRepository.save(trip);
     }
 
     /*Estadisticas de viaje*/

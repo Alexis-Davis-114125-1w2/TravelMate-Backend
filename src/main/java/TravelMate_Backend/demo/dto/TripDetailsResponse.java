@@ -6,7 +6,9 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Data
 @NoArgsConstructor
@@ -42,6 +44,8 @@ public class TripDetailsResponse {
     
     // Lista de participantes
     private List<ParticipantInfo> participants;
+    private Long createBy;
+    private Set<Long> adminIds;
     
     @Data
     @NoArgsConstructor

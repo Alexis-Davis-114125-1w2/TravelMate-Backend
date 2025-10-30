@@ -200,4 +200,21 @@ public class TripController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
     }
+    @PutMapping("/{tripId}/{userId}/admins/add/{adminId}")
+    public ResponseEntity<Trip> addAdminId(
+            @PathVariable Long userId,
+            @PathVariable Long adminId,
+            @PathVariable Long tripId) {
+        Trip trip = tripServices.addAdminId(userId, adminId,tripId);
+        return ResponseEntity.ok(trip);
+    }
+
+    @PutMapping("/{tripId}/{userId}/admins/remove/{adminId}")
+    public ResponseEntity<Trip> removeAdminId(
+            @PathVariable Long userId,
+            @PathVariable Long adminId,
+            @PathVariable Long tripId) {
+        Trip trip = tripServices.removeAdminId(userId, adminId,tripId);
+        return ResponseEntity.ok(trip);
+    }
 }
