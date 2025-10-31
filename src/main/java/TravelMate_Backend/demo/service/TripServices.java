@@ -11,6 +11,7 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -532,13 +533,14 @@ public class TripServices {
         return tripRepository.save(trip);
     }
 
-    public Trip removeAdminId(Long userId, Long adminId, Long tripId) {
+    public ResponseEntity<?> removeAdminId(Long userId, Long adminId, Long tripId) {
         Trip trip = getTripById(tripId, userId);
-        if (trip.getAdminIds().isEmpty()) {
-            throw new RuntimeException("No se puede eliminar el admin, porque no hay ninguno");
+        if (trip.getAdminIds().size()<=1) {
+            return ResponseEntity.badRequest().body("No se puede eliminar el admin, porque no hay uno solo");
         }
         trip.getAdminIds().remove(adminId);
-        return tripRepository.save(trip);
+        Trip trip1 = tripRepository.save(trip);
+        return ResponseEntity.ok(trip1);
     }
 
     /*Estadisticas de viaje*/

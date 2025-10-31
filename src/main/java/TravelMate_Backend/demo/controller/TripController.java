@@ -210,11 +210,11 @@ public class TripController {
     }
 
     @PutMapping("/{tripId}/{userId}/admins/remove/{adminId}")
-    public ResponseEntity<Trip> removeAdminId(
+    public ResponseEntity<?> removeAdminId(
             @PathVariable Long userId,
             @PathVariable Long adminId,
             @PathVariable Long tripId) {
-        Trip trip = tripServices.removeAdminId(userId, adminId,tripId);
-        return ResponseEntity.ok(trip);
+        ResponseEntity<?> trip = tripServices.removeAdminId(userId, adminId,tripId);
+        return trip;
     }
 }
