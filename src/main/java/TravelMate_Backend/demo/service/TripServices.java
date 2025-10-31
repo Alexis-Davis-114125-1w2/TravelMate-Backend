@@ -11,6 +11,7 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -34,6 +35,9 @@ public class TripServices {
     
     @PersistenceContext
     private EntityManager entityManager;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     public Trip createTrip(TripCreate tripDto, Long userId, MultipartFile imageFile) {
         User user = userRepository.findById(userId)
@@ -124,7 +128,7 @@ public class TripServices {
             tripRepository.delete(refreshedTrip);
         }
     }
-    //TODO no Probe
+
     public Trip updateTrip(Long tripId, TripCreate tripDto, Long userId) {
         Trip trip = getTripById(tripId, userId);
         MockTrip(tripDto, trip);
@@ -140,30 +144,24 @@ public class TripServices {
         trip.setDateF(tripDto.getDateF());
         trip.setCost(tripDto.getCost() != null ? tripDto.getCost() : BigDecimal.ZERO);
         //trip.setImage(tripDto.getImage());
+
     }
     //Todo resolver a futuro
     public Trip getTripById(Long tripId, Long userId) {
-        System.out.println("TripServices.getTripById - Verificando acceso para tripId: " + tripId + ", userId: " + userId);
-        
-        // Usar la lógica que sabemos que funciona: obtener todos los viajes del usuario
-        List<Trip> userTrips = tripRepository.findByUsersId(userId);
-        System.out.println("TripServices.getTripById - Viajes del usuario: " + userTrips.size());
-        
-        // Buscar el viaje específico en la lista de viajes del usuario
-        Trip trip = userTrips.stream()
-                .filter(userTrip -> userTrip.getId().equals(tripId))
-                .findFirst()
-                .orElse(null);
-        
-        if (trip == null) {
-            System.out.println("TripServices.getTripById - Viaje no encontrado en los viajes del usuario");
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new RuntimeException("Viaje no encontrado"));
+
+        // Verificar acceso sin tocar la relación
+        boolean userParticipates = tripRepository.existsByIdAndUsersId(tripId, userId);
+
+        if (!userParticipates) {
             throw new RuntimeException("No tienes acceso a este viaje");
         }
-        
-        System.out.println("TripServices.getTripById - Viaje encontrado: " + trip.getName());
-        System.out.println("TripServices.getTripById - Acceso concedido");
+
+        // No tocar trip.getUsers(), ni limpiar ni agregar nada
         return trip;
     }
+
 
     public TripDetailsResponse getTripDetails(Long tripId, Long userId) {
         System.out.println("TripServices.getTripDetails - Iniciando para tripId: " + tripId + ", userId: " + userId);
@@ -246,17 +244,38 @@ public class TripServices {
         
         return response;
     }
-
+    @Transactional
     public void deleteTrip(Long tripId, Long userId) {
-        Trip trip = getTripById(tripId, userId);
+        try {
+            // Verificar acceso del usuario
+            if (!userHasAccess(tripId, userId)) {
+                throw new RuntimeException("No tienes acceso a este viaje");
+            }
 
-        List<User> usersToUpdate = new ArrayList<>(trip.getUsers());
-        for (User user : usersToUpdate) {
-            user.getTrips().remove(trip);
-            userRepository.save(user);
+            // 1️⃣ Borrar relaciones en users_trip
+            jdbcTemplate.update("DELETE FROM users_trip WHERE trip_id = ?", tripId);
+
+            // 2️⃣ Borrar relaciones con destinos, si existen
+            jdbcTemplate.update("DELETE FROM trip_destinations WHERE trip_id = ?", tripId);
+
+            // 3️⃣ Borrar el viaje en sí
+            jdbcTemplate.update("DELETE FROM trips WHERE id = ?", tripId);
+
+            System.out.println("✅ Viaje eliminado correctamente (SQL directo): " + tripId);
+        } catch (Exception e) {
+            System.err.println("❌ Error eliminando trip: " + e.getMessage());
+            e.printStackTrace();
         }
 
-        tripRepository.delete(trip);
+    }
+
+    private boolean userHasAccess(Long tripId, Long userId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM users_trip WHERE trip_id = ? AND user_id = ?",
+                Integer.class,
+                tripId, userId
+        );
+        return count != null && count > 0;
     }
 
     public List<User> getTripParticipants(Long tripId, Long userId) {

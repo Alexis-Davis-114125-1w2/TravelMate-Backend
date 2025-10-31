@@ -94,7 +94,7 @@ public class TripController {
         }
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id}/{userId}")
     public ResponseEntity<?> deleteTrip(
             @PathVariable Long id,
             @RequestParam Long userId){
@@ -137,7 +137,7 @@ public class TripController {
         }
     }
 
-    @DeleteMapping("/{tripId}/users/{userId}")
+    @DeleteMapping("/{tripId}/users/{actingUserId}/{tripUserId}")
     public ResponseEntity<?> removeUserFromTrip(
             @PathVariable Long tripId,
             @PathVariable Long userId,
