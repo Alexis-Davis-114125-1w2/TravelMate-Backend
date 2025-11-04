@@ -156,6 +156,159 @@ public class TripServices {
         return trip;
     }
 
+    @Transactional
+    public Trip updateTripDates(Long tripId, TravelMate_Backend.demo.dto.TripDatesUpdateRequest request, Long userId) {
+        Trip trip = getTripById(tripId, userId);
+        
+        // Verificar que el usuario es admin
+        if (!trip.getAdminIds().contains(userId)) {
+            throw new RuntimeException("Solo los administradores pueden actualizar el viaje");
+        }
+        
+        trip.setDateI(request.getDateI());
+        trip.setDateF(request.getDateF());
+        trip.setStatus(determineStatus(trip));
+        
+        return tripRepository.save(trip);
+    }
+
+    @Transactional
+    public Trip updateTripLocations(Long tripId, TravelMate_Backend.demo.dto.TripLocationUpdateRequest request, Long userId) {
+        try {
+            System.out.println("TripServices.updateTripLocations - Iniciando actualización para tripId: " + tripId);
+            
+            Trip trip = getTripById(tripId, userId);
+            
+            // Verificar que el usuario es admin
+            if (!trip.getAdminIds().contains(userId)) {
+                throw new RuntimeException("Solo los administradores pueden actualizar el viaje");
+            }
+            
+            // Cargar TripDestinations existentes
+            List<TripDestination> tripDestinations = loadTripDestinations(tripId);
+            
+            // Si hay TripDestinations, actualizar usando actualización directa en BD
+            if (!tripDestinations.isEmpty()) {
+                TripDestination existingTripDestination = tripDestinations.get(0);
+                
+                // Obtener el destination_id actual
+                Long currentDestinationId = existingTripDestination.getId().getDestinationId();
+                System.out.println("TripServices.updateTripLocations - Destination ID actual: " + currentDestinationId);
+                
+                // Actualizar destino si es diferente
+                Destination destination = findOrCreateDestination(request.getDestination());
+                System.out.println("TripServices.updateTripLocations - Nuevo Destination ID: " + destination.getId());
+                
+                // Si el destination_id cambió, necesitamos eliminar el antiguo y crear uno nuevo
+                if (!currentDestinationId.equals(destination.getId())) {
+                    System.out.println("TripServices.updateTripLocations - Destination ID cambió, eliminando registro antiguo");
+                    // Eliminar el registro antiguo
+                    int deleted = entityManager.createNativeQuery("DELETE FROM trip_destinations WHERE trip_id = ? AND destination_id = ?")
+                            .setParameter(1, tripId)
+                            .setParameter(2, currentDestinationId)
+                            .executeUpdate();
+                    System.out.println("TripServices.updateTripLocations - Registros eliminados: " + deleted);
+                    
+                    entityManager.flush();
+                    
+                    // Crear uno nuevo con el nuevo destination_id
+                    System.out.println("TripServices.updateTripLocations - Creando nuevo registro");
+                    createTripDestinationWithOriginAndDestination(trip, destination, 
+                        createTripCreateFromLocationRequest(request));
+                } else {
+                    // Si el destination_id no cambió, actualizar directamente
+                    System.out.println("TripServices.updateTripLocations - Actualizando registro existente");
+                    
+                    // Usar actualización SQL directa para evitar problemas con relaciones
+                    String updateSql = "UPDATE trip_destinations SET " +
+                            "origin_address = ?, " +
+                            "origin_latitude = ?, " +
+                            "origin_longitude = ?, " +
+                            "destination_address = ?, " +
+                            "destination_latitude = ?, " +
+                            "destination_longitude = ?, " +
+                            "transport_mode = ? " +
+                            "WHERE trip_id = ? AND destination_id = ?";
+                    
+                    // Obtener el vehicle del request o del tripDestination existente
+                    String vehicle = request.getVehicle() != null ? 
+                            request.getVehicle() : 
+                            (existingTripDestination.getTransportMode() != null ? existingTripDestination.getTransportMode() : "auto");
+                    
+                    System.out.println("TripServices.updateTripLocations - Ejecutando UPDATE con parámetros:");
+                    System.out.println("  origin_address: " + (request.getOriginAddress() != null ? request.getOriginAddress() : request.getOrigin()));
+                    System.out.println("  origin_lat: " + (request.getOriginCoords() != null ? request.getOriginCoords().getLat() : "null"));
+                    System.out.println("  origin_lng: " + (request.getOriginCoords() != null ? request.getOriginCoords().getLng() : "null"));
+                    System.out.println("  destination_address: " + (request.getDestinationAddress() != null ? request.getDestinationAddress() : request.getDestination()));
+                    System.out.println("  destination_lat: " + (request.getDestinationCoords() != null ? request.getDestinationCoords().getLat() : "null"));
+                    System.out.println("  destination_lng: " + (request.getDestinationCoords() != null ? request.getDestinationCoords().getLng() : "null"));
+                    System.out.println("  vehicle: " + vehicle);
+                    System.out.println("  trip_id: " + tripId);
+                    System.out.println("  destination_id: " + currentDestinationId);
+                    
+                    int updated = entityManager.createNativeQuery(updateSql)
+                            .setParameter(1, request.getOriginAddress() != null ? request.getOriginAddress() : request.getOrigin())
+                            .setParameter(2, request.getOriginCoords() != null ? request.getOriginCoords().getLat() : null)
+                            .setParameter(3, request.getOriginCoords() != null ? request.getOriginCoords().getLng() : null)
+                            .setParameter(4, request.getDestinationAddress() != null ? request.getDestinationAddress() : request.getDestination())
+                            .setParameter(5, request.getDestinationCoords() != null ? request.getDestinationCoords().getLat() : null)
+                            .setParameter(6, request.getDestinationCoords() != null ? request.getDestinationCoords().getLng() : null)
+                            .setParameter(7, vehicle)
+                            .setParameter(8, tripId)
+                            .setParameter(9, currentDestinationId)
+                            .executeUpdate();
+                    
+                    System.out.println("TripServices.updateTripLocations - Registros actualizados: " + updated);
+                    
+                    if (updated == 0) {
+                        throw new RuntimeException("No se pudo actualizar el registro. Posiblemente no existe o hubo un error.");
+                    }
+                    
+                    entityManager.flush();
+                }
+            } else {
+                // Si no hay TripDestinations, crear uno nuevo
+                System.out.println("TripServices.updateTripLocations - No hay TripDestinations existentes, creando uno nuevo");
+                Destination destination = findOrCreateDestination(request.getDestination());
+                createTripDestinationWithOriginAndDestination(trip, destination, 
+                    createTripCreateFromLocationRequest(request));
+            }
+            
+            System.out.println("TripServices.updateTripLocations - Actualización completada exitosamente");
+            return tripRepository.save(trip);
+            
+        } catch (Exception e) {
+            System.err.println("TripServices.updateTripLocations - ERROR: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error al actualizar las ubicaciones del viaje: " + e.getMessage(), e);
+        }
+    }
+
+    private TripCreate createTripCreateFromLocationRequest(TravelMate_Backend.demo.dto.TripLocationUpdateRequest request) {
+        TripCreate tripCreate = new TripCreate();
+        tripCreate.setOrigin(request.getOrigin());
+        tripCreate.setDestination(request.getDestination());
+        tripCreate.setOriginAddress(request.getOriginAddress());
+        tripCreate.setDestinationAddress(request.getDestinationAddress());
+        tripCreate.setVehicle(request.getVehicle());
+        
+        if (request.getOriginCoords() != null) {
+            TripCreate.Coords originCoords = new TripCreate.Coords();
+            originCoords.setLat(request.getOriginCoords().getLat());
+            originCoords.setLng(request.getOriginCoords().getLng());
+            tripCreate.setOriginCoords(originCoords);
+        }
+        
+        if (request.getDestinationCoords() != null) {
+            TripCreate.Coords destinationCoords = new TripCreate.Coords();
+            destinationCoords.setLat(request.getDestinationCoords().getLat());
+            destinationCoords.setLng(request.getDestinationCoords().getLng());
+            tripCreate.setDestinationCoords(destinationCoords);
+        }
+        
+        return tripCreate;
+    }
+
     private void MockTrip(TripCreate tripDto, Trip trip) {
         trip.setName(tripDto.getName());
         trip.setDescription(tripDto.getDescription());

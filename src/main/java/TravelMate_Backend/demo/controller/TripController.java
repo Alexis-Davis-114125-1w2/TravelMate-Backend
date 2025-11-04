@@ -10,12 +10,14 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -216,5 +218,79 @@ public class TripController {
             @PathVariable Long tripId) {
         ResponseEntity<?> trip = tripServices.removeAdminId(userId, adminId,tripId);
         return trip;
+    }
+
+    @PutMapping("/{tripId}/dates")
+    public ResponseEntity<?> updateTripDates(
+            @PathVariable Long tripId,
+            @RequestParam Long userId,
+            @Valid @RequestBody TravelMate_Backend.demo.dto.TripDatesUpdateRequest request) {
+        try {
+            System.out.println("TripController.updateTripDates - Recibiendo request para tripId: " + tripId + ", userId: " + userId);
+            System.out.println("TripController.updateTripDates - Request data: dateI=" + request.getDateI() + ", dateF=" + request.getDateF());
+            
+            Trip updatedTrip = tripServices.updateTripDates(tripId, request, userId);
+            System.out.println("TripController.updateTripDates - Trip actualizado exitosamente");
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Fechas del viaje actualizadas exitosamente",
+                    "data", updatedTrip
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("TripController.updateTripDates - Error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
+    @PutMapping("/{tripId}/locations")
+    public ResponseEntity<?> updateTripLocations(
+            @PathVariable Long tripId,
+            @RequestParam Long userId,
+            @Valid @RequestBody TravelMate_Backend.demo.dto.TripLocationUpdateRequest request) {
+        try {
+            System.out.println("TripController.updateTripLocations - Recibiendo request para tripId: " + tripId + ", userId: " + userId);
+            System.out.println("TripController.updateTripLocations - Request data: origin=" + request.getOrigin() + ", destination=" + request.getDestination());
+            System.out.println("TripController.updateTripLocations - OriginCoords: " + (request.getOriginCoords() != null ? request.getOriginCoords().getLat() + "," + request.getOriginCoords().getLng() : "null"));
+            System.out.println("TripController.updateTripLocations - DestinationCoords: " + (request.getDestinationCoords() != null ? request.getDestinationCoords().getLat() + "," + request.getDestinationCoords().getLng() : "null"));
+            
+            Trip updatedTrip = tripServices.updateTripLocations(tripId, request, userId);
+            System.out.println("TripController.updateTripLocations - Trip actualizado exitosamente");
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Origen y destino del viaje actualizados exitosamente",
+                    "data", updatedTrip
+            ));
+        } catch (RuntimeException e) {
+            System.err.println("TripController.updateTripLocations - Error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        
+        List<String> errors = ex.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .collect(Collectors.toList());
+        
+        errorResponse.put("message", "Error de validación: " + String.join(", ", errors));
+        errorResponse.put("errors", errors);
+        
+        System.err.println("TripController - Error de validación: " + errors);
+        ex.printStackTrace();
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 }
