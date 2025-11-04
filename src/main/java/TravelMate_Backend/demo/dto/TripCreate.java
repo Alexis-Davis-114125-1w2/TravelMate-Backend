@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.dto;
 
+import TravelMate_Backend.demo.model.Currency;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
@@ -29,6 +30,9 @@ public class TripCreate {
 
     @DecimalMin(value = "0.0", inclusive = true, message = "El costo no puede ser negativo")
     private BigDecimal cost;
+
+    @NotNull(message = "La moneda es obligatoria")
+    private Currency currency;
 
     private String status;
     

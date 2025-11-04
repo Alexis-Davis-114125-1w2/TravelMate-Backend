@@ -40,6 +40,9 @@ public class TripServices {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private WalletService walletService;
+
     public Trip createTrip(TripCreate tripDto, Long userId, MultipartFile imageFile) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
@@ -66,6 +69,16 @@ public class TripServices {
         
         // Crear TripDestination para origen y destino si están disponibles (después de guardar el trip)
         createTripDestinations(savedTrip, tripDto);
+
+        // Crear billeteras: general e individual del usuario creador
+        BigDecimal generalAmount = tripDto.getCost() != null ? tripDto.getCost() : BigDecimal.ZERO;
+        TravelMate_Backend.demo.model.Currency currency = tripDto.getCurrency() != null ? tripDto.getCurrency() : TravelMate_Backend.demo.model.Currency.PESOS;
+        
+        // Crear billetera general
+        walletService.createGeneralWallet(savedTrip, generalAmount, currency);
+        
+        // Crear billetera individual del usuario creador
+        walletService.createIndividualWallet(savedTrip, user, currency);
 
         trip.setStatus(determineStatus(trip));
 
@@ -103,6 +116,11 @@ public class TripServices {
 
         newUser.getTrips().add(trip);
         userRepository.save(newUser);
+
+        // Crear billetera individual para el nuevo usuario
+        // Obtener la moneda de la billetera general del viaje
+        TravelMate_Backend.demo.model.Currency currency = walletService.getGeneralWallet(tripId).getCurrency();
+        walletService.createIndividualWallet(trip, newUser, currency);
     }
     //TODO tampoco probe
     public void removeUserFromTrip(Long userToRemoveId, Long tripId, Long currentUserId) {
@@ -524,6 +542,12 @@ public class TripServices {
         }
 
         createUserTripRelation(userId, trip.getId());
+        
+        // Crear billetera individual para el nuevo usuario
+        // Obtener la moneda de la billetera general del viaje
+        TravelMate_Backend.demo.model.Currency currency = walletService.getGeneralWallet(trip.getId()).getCurrency();
+        walletService.createIndividualWallet(trip, user, currency);
+        
         System.out.println("usuario guardado");
     }
 

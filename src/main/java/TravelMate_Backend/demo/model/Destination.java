@@ -43,8 +43,4 @@ public class Destination {
     @OneToMany(mappedBy = "destination", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private Set<TripDestination> tripDestinations = new HashSet<>();
-
-    @OneToMany(mappedBy = "destination", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore
-    private Set<Wallet> wallets = new HashSet<>();
 }
