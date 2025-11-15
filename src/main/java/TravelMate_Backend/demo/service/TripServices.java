@@ -122,29 +122,28 @@ public class TripServices {
         TravelMate_Backend.demo.model.Currency currency = walletService.getGeneralWallet(tripId).getCurrency();
         walletService.createIndividualWallet(trip, newUser, currency);
     }
-    //TODO tampoco probe
+    
     public void removeUserFromTrip(Long userToRemoveId, Long tripId, Long currentUserId) {
-        Trip trip = getTripById(tripId, currentUserId);
-
+        List<User> users = getTripParticipants(tripId, currentUserId);
+        if (users.size()<=1) {
+            throw new RuntimeException("No se puede eliminar el usuario, porque es el unico");
+        }
         User userToRemove = userRepository.findById(userToRemoveId)
                 .orElseThrow(() -> new RuntimeException("Usuario a remover no encontrado"));
 
-        if (!currentUserId.equals(userToRemoveId)) {
-            boolean currentUserParticipates = trip.getUsers().stream()
-                    .anyMatch(user -> user.getId().equals(currentUserId));
-            if (!currentUserParticipates) {
-                throw new RuntimeException("No tienes permisos para remover usuarios de este viaje");
+        try {
+            // Verificar acceso del usuario
+            if (!userHasAccess(tripId, currentUserId)) {
+                throw new RuntimeException("No tienes acceso a este viaje");
             }
-        }
 
-        userToRemove.getTrips().remove(trip);
-        userRepository.save(userToRemove);
+            // 1️⃣ Borrar relaciones en users_trip
+            jdbcTemplate.update("DELETE FROM users_trip WHERE trip_id = ? AND user_id = ?", tripId, userToRemoveId);
 
-        tripRepository.flush();
-        Trip refreshedTrip = tripRepository.findById(tripId).orElse(null);
-
-        if (refreshedTrip != null && refreshedTrip.getUsers().isEmpty()) {
-            tripRepository.delete(refreshedTrip);
+            System.out.println("✅ Usuario eliminado del viaje: " + tripId);
+        } catch (Exception e) {
+            System.err.println("❌ Error eliminando trip: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

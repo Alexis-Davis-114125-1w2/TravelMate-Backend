@@ -139,14 +139,14 @@ public class TripController {
         }
     }
 
-    @DeleteMapping("/{tripId}/users/{actingUserId}/{tripUserId}")
+    @DeleteMapping("/{tripId}/users/{eliminateUserId}/{tripUserId}")
     public ResponseEntity<?> removeUserFromTrip(
             @PathVariable Long tripId,
-            @PathVariable Long userId,
+            @PathVariable Long eliminateUserId,
             @PathVariable Long tripUserId) {
         try {
 
-            tripServices.removeUserFromTrip(userId, tripId, tripUserId);
+            tripServices.removeUserFromTrip(eliminateUserId, tripId, tripUserId);
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
