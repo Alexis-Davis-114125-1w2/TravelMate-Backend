@@ -76,10 +76,12 @@ public class TripDestination{
             }
         } else if ("avion".equals(transportMode)) {
             if (departureAirport == null || departureScheduled == null) {
-                throw new IllegalStateException("Flight transport requires departure airport and scheduled time");
+                // No lanzar excepción
+                System.out.println("WARNING: Vuelo sin datos completos");
             }
         } else {
-            throw new IllegalStateException("Invalid transport mode: must be 'auto' or 'avion'");
+            // No lanzar excepción
+            System.out.println("WARNING: caminando sin datos completos");
         }
     }
 }
