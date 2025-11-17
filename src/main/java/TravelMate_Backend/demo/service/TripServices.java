@@ -125,9 +125,17 @@ public class TripServices {
     
     public void removeUserFromTrip(Long userToRemoveId, Long tripId, Long currentUserId) {
         List<User> users = getTripParticipants(tripId, currentUserId);
+        Trip trip = getTripById(tripId, currentUserId);
         if (users.size()<=1) {
             throw new RuntimeException("No se puede eliminar el usuario, porque es el unico");
         }
+        // Verificar que haya mas usuarios administradores
+        if (trip.getAdminIds().contains(userToRemoveId)) {
+            if (trip.getAdminIds().size()<=1) {
+                throw new RuntimeException("No hay otro usuario administrador para actualizar el viaje");
+            }
+        }
+
         User userToRemove = userRepository.findById(userToRemoveId)
                 .orElseThrow(() -> new RuntimeException("Usuario a remover no encontrado"));
 
@@ -429,6 +437,9 @@ public class TripServices {
             // 2️⃣ Borrar relaciones con destinos, si existen
             jdbcTemplate.update("DELETE FROM trip_destinations WHERE trip_id = ?", tripId);
 
+            // Borrar la relacion con wallet
+            jdbcTemplate.update("DELETE FROM wallet WHERE trip_id = ?", tripId);
+
             // 3️⃣ Borrar el viaje en sí
             jdbcTemplate.update("DELETE FROM trips WHERE id = ?", tripId);
 
@@ -711,7 +722,7 @@ public class TripServices {
 
     public ResponseEntity<?> removeAdminId(Long userId, Long adminId, Long tripId) {
         Trip trip = getTripById(tripId, userId);
-        if (trip.getAdminIds().size()<=1) {
+        if (trip.getAdminIds().size()<2) {
             return ResponseEntity.badRequest().body("No se puede eliminar el admin, porque no hay uno solo");
         }
         trip.getAdminIds().remove(adminId);
