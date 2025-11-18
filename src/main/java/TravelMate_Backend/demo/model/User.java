@@ -45,7 +45,7 @@ public class User implements UserDetails {
     @Column(name = "google_id", unique = true)
     private String googleId;
     
-    @Column(name = "profile_picture_url")
+    @Column(name = "profile_picture_url", columnDefinition = "TEXT")
     private String profilePictureUrl;
     
     @Enumerated(EnumType.STRING)
