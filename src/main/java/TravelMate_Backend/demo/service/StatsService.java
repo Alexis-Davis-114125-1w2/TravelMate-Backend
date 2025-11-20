@@ -4,10 +4,7 @@ import TravelMate_Backend.demo.dto.TripDetailsResponse;
 import TravelMate_Backend.demo.dto.TripStats;
 import TravelMate_Backend.demo.dto.UserStatsResponse;
 import TravelMate_Backend.demo.model.*;
-import TravelMate_Backend.demo.repository.PurchaseRepository;
-import TravelMate_Backend.demo.repository.TipRepository;
-import TravelMate_Backend.demo.repository.TripRepository;
-import TravelMate_Backend.demo.repository.UserRepository;
+import TravelMate_Backend.demo.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
@@ -31,6 +28,9 @@ public class StatsService {
 
     @Autowired
     private PurchaseRepository purchaseRepository;
+
+    @Autowired
+    private WalletRepository walletRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -924,10 +924,8 @@ public class StatsService {
         if (!userParticipates) {
             throw new RuntimeException("No tienes acceso a este viaje");
         }
-        List<User> users = userRepository.findByTripsId(tripId);
 
-
-        return users;
+        return userRepository.findByTripsId(tripId);
     }
 
     /**
@@ -955,7 +953,6 @@ public class StatsService {
         stats.setStartDate(trip.getDateI());
         stats.setEndDate(trip.getDateF());
         stats.setStatus(determineStatus(trip));
-        stats.setCurrency(trip.getCost().toString());
 
         // Obtener destino principal
         String destination = "Sin destino";
@@ -995,9 +992,6 @@ public class StatsService {
 
         // Obtener todas las compras del viaje
         List<Purchase> generalPurchases = purchaseRepository.findByTripIdAndIsGeneralTrue(tripId);
-        List<Purchase> allIndividualPurchases = purchaseRepository.findByTripId(tripId).stream()
-                .filter(p -> p.getUser()!=null)
-                .collect(Collectors.toList());
         List<Purchase> userIndividualPurchases = purchaseRepository.findByTripIdAndUserIdAndIsGeneralFalse(tripId, userId);
 
         // Total gastado (generales + todos los individuales)
@@ -1005,7 +999,7 @@ public class StatsService {
         for (Purchase p : generalPurchases) {
             totalSpent = totalSpent.add(p.getPrice());
         }
-        for (Purchase p : allIndividualPurchases) {
+        for (Purchase p : userIndividualPurchases) {
             totalSpent = totalSpent.add(p.getPrice());
         }
         stats.setTotalSpent(totalSpent);
@@ -1029,16 +1023,16 @@ public class StatsService {
         stats.setUserPersonalSpent(userPersonalSpent);
 
         // Gastos por día
-        calculateDailyExpenses(trip, generalPurchases, allIndividualPurchases, stats);
+        calculateDailyExpenses(trip, generalPurchases, userIndividualPurchases, stats);
 
         // Top días más gastados
         calculateTopExpensiveDays(stats);
 
         // Gastos por categoría
-        calculateExpensesByCategory(generalPurchases, allIndividualPurchases, totalSpent, stats);
+        calculateExpensesByCategory(generalPurchases, userIndividualPurchases, totalSpent, stats);
 
         // Gastos por participante
-        calculateExpensesByParticipant(trip, generalPurchases, allIndividualPurchases, stats);
+        calculateExpensesByParticipant(trip, generalPurchases, userIndividualPurchases, stats);
 
         return stats;
     }
@@ -1048,58 +1042,71 @@ public class StatsService {
      */
     private void calculateGeneralWalletStats(Long tripId, TripStats stats) {
         // Buscar billetera general del viaje (sin usuario asignado)
-        List<Purchase> generalPurchases = purchaseRepository.findByTripIdAndIsGeneralTrue(tripId);
+        Wallet generalWallet = walletRepository.findByTripIdAndIsGeneralTrue(tripId)
+                .orElse(null);
 
-        // Buscar si hay un presupuesto general definido
-        // Asumiendo que hay una columna generalBudget en Trip o similar
-        // Por ahora calculamos basándonos en las compras
         BigDecimal initialGeneralBudget = BigDecimal.ZERO;
         BigDecimal currentGeneralBalance = BigDecimal.ZERO;
 
-        // Si existe una billetera general configurada, la obtenemos
-        // Este código depende de cómo manejes las billeteras en tu sistema
-        // Por ahora usamos un cálculo simple
+        if (generalWallet != null) {
+            initialGeneralBudget = generalWallet.getAmount();
 
-        BigDecimal generalSpent = generalPurchases.stream()
-                .map(Purchase::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // Calcular gastos generales
+            List<Purchase> generalPurchases = purchaseRepository.findByTripIdAndIsGeneralTrue(tripId);
+            BigDecimal generalSpent = generalPurchases.stream()
+                    .map(Purchase::getPrice)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // Valores por defecto o calculados
-        initialGeneralBudget = generalSpent.multiply(BigDecimal.valueOf(1.2)); // 20% más como presupuesto inicial
-        currentGeneralBalance = initialGeneralBudget.subtract(generalSpent);
+            currentGeneralBalance = initialGeneralBudget.subtract(generalSpent);
+
+            Double generalBudgetUsagePercent = initialGeneralBudget.compareTo(BigDecimal.ZERO) > 0
+                    ? generalSpent.divide(initialGeneralBudget, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).doubleValue()
+                    : 0.0;
+
+            stats.setGeneralBudgetUsagePercent(generalBudgetUsagePercent);
+        } else {
+            stats.setGeneralBudgetUsagePercent(0.0);
+        }
 
         stats.setInitialGeneralBudget(initialGeneralBudget);
         stats.setCurrentGeneralBalance(currentGeneralBalance);
-
-        Double generalBudgetUsagePercent = initialGeneralBudget.compareTo(BigDecimal.ZERO) > 0
-                ? generalSpent.divide(initialGeneralBudget, 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100)).doubleValue()
-                : 0.0;
-        stats.setGeneralBudgetUsagePercent(generalBudgetUsagePercent);
     }
 
     /**
      * Calcula estadísticas de la billetera personal del usuario
      */
     private void calculatePersonalWalletStats(Long tripId, Long userId, TripStats stats) {
-        List<Purchase> userPurchases = purchaseRepository.findByTripIdAndUserIdAndIsGeneralFalse(tripId, userId);
+        // Buscar billetera personal del usuario para este viaje
+        Wallet personalWallet = walletRepository.findByTripIdAndUserIdAndIsGeneralFalse(tripId, userId)
+                .orElse(null);
 
-        BigDecimal userSpent = userPurchases.stream()
-                .map(Purchase::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal userInitialBudget = BigDecimal.ZERO;
+        BigDecimal userCurrentBalance = BigDecimal.ZERO;
 
-        // Valores por defecto o calculados
-        BigDecimal userInitialBudget = userSpent.multiply(BigDecimal.valueOf(1.2)); // 20% más como presupuesto inicial
-        BigDecimal userCurrentBalance = userInitialBudget.subtract(userSpent);
+        if (personalWallet != null) {
+            userInitialBudget = personalWallet.getAmount();
+
+            // Calcular gastos personales
+            List<Purchase> userPurchases = purchaseRepository.findByTripIdAndUserIdAndIsGeneralFalse(tripId, userId);
+            BigDecimal userSpent = userPurchases.stream()
+                    .map(Purchase::getPrice)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            userCurrentBalance = userInitialBudget.subtract(userSpent);
+
+            Double userBudgetUsagePercent = userInitialBudget.compareTo(BigDecimal.ZERO) > 0
+                    ? userSpent.divide(userInitialBudget, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).doubleValue()
+                    : 0.0;
+
+            stats.setUserPersonalBudgetUsagePercent(userBudgetUsagePercent);
+        } else {
+            stats.setUserPersonalBudgetUsagePercent(0.0);
+        }
 
         stats.setUserInitialPersonalBudget(userInitialBudget);
         stats.setUserCurrentPersonalBalance(userCurrentBalance);
-
-        Double userBudgetUsagePercent = userInitialBudget.compareTo(BigDecimal.ZERO) > 0
-                ? userSpent.divide(userInitialBudget, 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100)).doubleValue()
-                : 0.0;
-        stats.setUserPersonalBudgetUsagePercent(userBudgetUsagePercent);
     }
 
     /**
@@ -1167,10 +1174,10 @@ public class StatsService {
         allPurchases.addAll(generalPurchases);
         allPurchases.addAll(allIndividualPurchases);
 
-        // Agrupar por categoría
+        // Agrupar por categoría (usando description como categoría)
         Map<String, List<Purchase>> purchasesByCategory = allPurchases.stream()
-                .filter(p -> p.getDescription() != null)
-                .collect(Collectors.groupingBy(p -> p.getDescription()));
+                .filter(p -> p.getDescription() != null && !p.getDescription().trim().isEmpty())
+                .collect(Collectors.groupingBy(Purchase::getDescription));
 
         List<TripStats.CategoryExpense> categoryExpenses = purchasesByCategory.entrySet().stream()
                 .map(entry -> {
@@ -1209,11 +1216,11 @@ public class StatsService {
 
         // Contar compras individuales por usuario
         for (Purchase purchase : allIndividualPurchases) {
-            Long userId = purchase.getUser().getId();
-            expensesByUser.put(userId,
-                    expensesByUser.getOrDefault(userId, BigDecimal.ZERO).add(purchase.getPrice()));
-            purchaseCountByUser.put(userId,
-                    purchaseCountByUser.getOrDefault(userId, 0) + 1);
+            Long purchaseUserId = purchase.getUser().getId();
+            expensesByUser.put(purchaseUserId,
+                    expensesByUser.getOrDefault(purchaseUserId, BigDecimal.ZERO).add(purchase.getPrice()));
+            purchaseCountByUser.put(purchaseUserId,
+                    purchaseCountByUser.getOrDefault(purchaseUserId, 0) + 1);
         }
 
         // Distribuir compras generales equitativamente entre participantes
@@ -1227,9 +1234,9 @@ public class StatsService {
                     BigDecimal.valueOf(participantCount), 2, RoundingMode.HALF_UP);
 
             for (User user : trip.getUsers()) {
-                Long userId = user.getId();
-                expensesByUser.put(userId,
-                        expensesByUser.getOrDefault(userId, BigDecimal.ZERO).add(generalPerPerson));
+                Long userIdKey = user.getId();
+                expensesByUser.put(userIdKey,
+                        expensesByUser.getOrDefault(userIdKey, BigDecimal.ZERO).add(generalPerPerson));
             }
         }
 
