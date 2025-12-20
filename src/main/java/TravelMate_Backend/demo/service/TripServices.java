@@ -144,7 +144,10 @@ public class TripServices {
             if (!userHasAccess(tripId, currentUserId)) {
                 throw new RuntimeException("No tienes acceso a este viaje");
             }
-
+            if (trip.getAdminIds().contains(userToRemoveId)) {
+                trip.getAdminIds().remove(userToRemoveId);
+            }
+            
             // 1️⃣ Borrar relaciones en users_trip
             jdbcTemplate.update("DELETE FROM users_trip WHERE trip_id = ? AND user_id = ?", tripId, userToRemoveId);
 

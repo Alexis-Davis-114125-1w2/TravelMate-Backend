@@ -105,4 +105,16 @@ public class UserDetailsServiceImpl implements UserDetailsService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         return user.getProfilePictureUrl();
     }
+
+    @Transactional
+    public void deleteAccount(User currentUser) {
+        try {
+            // Eliminar todas las relaciones del usuario antes de eliminar la cuenta
+            // Esto se manejará en cascada si las relaciones están configuradas correctamente
+            // Por ahora, eliminamos el usuario directamente
+            userRepository.delete(currentUser);
+        } catch (Exception e) {
+            throw new RuntimeException("Error al eliminar la cuenta: " + e.getMessage());
+        }
+    }
 }

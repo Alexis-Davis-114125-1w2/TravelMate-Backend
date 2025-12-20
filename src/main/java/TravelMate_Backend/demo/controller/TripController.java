@@ -161,6 +161,27 @@ public class TripController {
         }
     }
 
+    @DeleteMapping("/{tripId}/leave")
+    public ResponseEntity<?> leaveTrip(
+            @PathVariable Long tripId,
+            @RequestParam Long userId) {
+        try {
+            // El usuario se sale a sí mismo del viaje
+            tripServices.removeUserFromTrip(userId, tripId, userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Te has salido del viaje exitosamente"
+            ));
+
+        } catch (RuntimeException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
     @GetMapping("/{id}/participants")
     public ResponseEntity<?> getTripParticipants(
             @PathVariable Long id,
