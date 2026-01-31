@@ -96,7 +96,7 @@ public class TripController {
         }
     }
 
-    @DeleteMapping("/{id}/{userId}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteTrip(
             @PathVariable Long id,
             @RequestParam Long userId){
@@ -239,6 +239,39 @@ public class TripController {
             @PathVariable Long tripId) {
         ResponseEntity<?> trip = tripServices.removeAdminId(userId, adminId,tripId);
         return trip;
+    }
+
+    @PatchMapping("/{tripId}/name")
+    public ResponseEntity<?> updateTripName(
+            @PathVariable Long tripId,
+            @RequestParam Long userId,
+            @RequestBody Map<String, String> request) {
+        try {
+            System.out.println("TripController.updateTripName - tripId: " + tripId + ", userId: " + userId);
+            System.out.println("TripController.updateTripName - request body: " + request);
+            
+            String newName = request.get("name");
+            if (newName == null || newName.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "El nombre no puede estar vacío"
+                ));
+            }
+            
+            Trip updatedTrip = tripServices.updateTripName(tripId, newName.trim(), userId);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Nombre del viaje actualizado exitosamente",
+                    "data", updatedTrip
+            ));
+        } catch (Exception e) {
+            System.err.println("TripController.updateTripName - Error: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", e.getMessage() != null ? e.getMessage() : "Error desconocido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
     }
 
     @PutMapping("/{tripId}/dates")

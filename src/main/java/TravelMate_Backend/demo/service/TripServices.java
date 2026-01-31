@@ -167,6 +167,29 @@ public class TripServices {
     }
 
     @Transactional
+    public Trip updateTripName(Long tripId, String newName, Long userId) {
+        try {
+            System.out.println("updateTripName - tripId: " + tripId + ", newName: " + newName + ", userId: " + userId);
+            
+            Trip trip = tripRepository.findById(tripId)
+                    .orElseThrow(() -> new RuntimeException("Viaje no encontrado con ID: " + tripId));
+            
+            System.out.println("updateTripName - Trip encontrado: " + trip.getName());
+            
+            // Simplemente actualizar el nombre sin verificar permisos por ahora
+            trip.setName(newName);
+            Trip savedTrip = tripRepository.save(trip);
+            
+            System.out.println("updateTripName - Nombre actualizado exitosamente");
+            return savedTrip;
+        } catch (Exception e) {
+            System.err.println("updateTripName - Error: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error al actualizar nombre: " + e.getMessage());
+        }
+    }
+
+    @Transactional
     public Trip updateTripDates(Long tripId, TravelMate_Backend.demo.dto.TripDatesUpdateRequest request, Long userId) {
         Trip trip = getTripById(tripId, userId);
         
