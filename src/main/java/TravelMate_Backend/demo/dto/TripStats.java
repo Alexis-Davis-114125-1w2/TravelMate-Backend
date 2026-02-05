@@ -1,5 +1,6 @@
 package TravelMate_Backend.demo.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -41,6 +42,9 @@ public class TripStats {
 
     // Días más gastados
     private List<DailyExpense> topExpensiveDays;
+
+    @JsonProperty("topIndividualExpensiveDays")
+    private List<DailyExpense> topIndividualExpensiveDays;
 
     // Gastos por categoría
     private List<CategoryExpense> expensesByCategory;

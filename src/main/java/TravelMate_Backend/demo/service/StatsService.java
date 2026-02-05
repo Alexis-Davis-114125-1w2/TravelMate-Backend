@@ -1028,6 +1028,8 @@ public class StatsService {
         // Top días más gastados
         calculateTopExpensiveDays(stats);
 
+        calculateTopIndividualExpensiveDays(trip, userId, stats);
+
         // Gastos por categoría
         calculateExpensesByCategory(generalPurchases, userIndividualPurchases, totalSpent, stats);
 
@@ -1207,53 +1209,171 @@ public class StatsService {
     }
 
     /**
-     * Calcula gastos por participante
+     * Calcula gastos por participante - SOLO quien CREÓ/PAGÓ los gastos GENERALES
      */
     private void calculateExpensesByParticipant(Trip trip, List<Purchase> generalPurchases,
                                                 List<Purchase> allIndividualPurchases, TripStats stats) {
-        Map<Long, BigDecimal> expensesByUser = new HashMap<>();
-        Map<Long, Integer> purchaseCountByUser = new HashMap<>();
+        Map<Long, BigDecimal> generalExpensesByUser = new HashMap<>();
+        Map<Long, Integer> generalPurchaseCountByUser = new HashMap<>();
+        Map<Long, String> userNames = new HashMap<>();
 
-        // Contar compras individuales por usuario
-        for (Purchase purchase : allIndividualPurchases) {
-            Long purchaseUserId = purchase.getUser().getId();
-            expensesByUser.put(purchaseUserId,
-                    expensesByUser.getOrDefault(purchaseUserId, BigDecimal.ZERO).add(purchase.getPrice()));
-            purchaseCountByUser.put(purchaseUserId,
-                    purchaseCountByUser.getOrDefault(purchaseUserId, 0) + 1);
+        // Usar el método getTripParticipants para obtener participantes
+        List<User> participants;
+        try {
+            participants = getTripParticipants(trip.getId(), trip.getCreateBy());
+        } catch (Exception e) {
+            // Si falla, intentar con userRepository
+            participants = userRepository.findByTripsId(trip.getId());
         }
 
-        // Distribuir compras generales equitativamente entre participantes
-        BigDecimal generalTotal = generalPurchases.stream()
-                .map(Purchase::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (participants == null || participants.isEmpty()) {
+            System.out.println("⚠️ No se encontraron participantes para el viaje " + trip.getId());
+            stats.setExpensesByParticipant(new ArrayList<>());
+            return;
+        }
 
-        int participantCount = trip.getUsers().size();
-        if (participantCount > 0 && generalTotal.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal generalPerPerson = generalTotal.divide(
-                    BigDecimal.valueOf(participantCount), 2, RoundingMode.HALF_UP);
+        System.out.println("✅ Participantes encontrados: " + participants.size());
 
-            for (User user : trip.getUsers()) {
-                Long userIdKey = user.getId();
-                expensesByUser.put(userIdKey,
-                        expensesByUser.getOrDefault(userIdKey, BigDecimal.ZERO).add(generalPerPerson));
+        // Inicializar todos los participantes
+        for (User user : participants) {
+            userNames.put(user.getId(), user.getName());
+            generalExpensesByUser.put(user.getId(), BigDecimal.ZERO);
+            generalPurchaseCountByUser.put(user.getId(), 0);
+        }
+
+        System.out.println("📊 Procesando " + generalPurchases.size() + " compras generales");
+
+        // ========================================
+        // GASTOS GENERALES - Por quien LOS CREÓ/PAGÓ
+        // ========================================
+        for (Purchase purchase : generalPurchases) {
+            System.out.println("🔍 Procesando compra: " + purchase.getDescription() +
+                    " | Precio: " + purchase.getPrice() +
+                    " | Usuario: " + (purchase.getCreatedBy() != null));
+
+            if (purchase.getCreatedBy() != null) {
+                User user = participants.stream().filter(p -> p.getId().equals(purchase.getCreatedBy())).findFirst().orElse(null);
+                assert user != null;
+                Long creatorUserId = user.getId();
+                String creatorUserName = user.getName();
+
+                System.out.println("   👤 Creador: " + creatorUserName + " (ID: " + creatorUserId + ")");
+
+                // Asegurar que el usuario existe en el mapa
+                if (!generalExpensesByUser.containsKey(creatorUserId)) {
+                    System.out.println("   ⚠️ Usuario NO estaba en la lista inicial, agregando...");
+                    generalExpensesByUser.put(creatorUserId, BigDecimal.ZERO);
+                    generalPurchaseCountByUser.put(creatorUserId, 0);
+                    userNames.put(creatorUserId, creatorUserName);
+                }
+
+                // Sumar al usuario que CREÓ el gasto
+                BigDecimal currentAmount = generalExpensesByUser.get(creatorUserId);
+                BigDecimal newAmount = currentAmount.add(purchase.getPrice());
+                generalExpensesByUser.put(creatorUserId, newAmount);
+
+                Integer currentCount = generalPurchaseCountByUser.get(creatorUserId);
+                generalPurchaseCountByUser.put(creatorUserId, currentCount + 1);
+
+                System.out.println("   ✅ Acumulado: " + newAmount + " (" + (currentCount + 1) + " compras)");
+            } else {
+                System.out.println("   ❌ ERROR: Purchase.getUser() es NULL para compra: " + purchase.getDescription());
             }
         }
 
-        // Crear lista de gastos por participante
-        List<TripStats.ParticipantExpense> participantExpenses = trip.getUsers().stream()
-                .map(user -> {
-                    TripStats.ParticipantExpense participantExpense = new TripStats.ParticipantExpense();
-                    participantExpense.setUserId(user.getId());
-                    participantExpense.setUserName(user.getName());
-                    participantExpense.setTotalSpent(expensesByUser.getOrDefault(user.getId(), BigDecimal.ZERO));
-                    participantExpense.setExpenseCount(purchaseCountByUser.getOrDefault(user.getId(), 0));
-                    return participantExpense;
-                })
-                .sorted((p1, p2) -> p2.getTotalSpent().compareTo(p1.getTotalSpent()))
+        // DEBUG: Mostrar totales por usuario
+        System.out.println("\n📈 TOTALES POR USUARIO:");
+        for (Map.Entry<Long, BigDecimal> entry : generalExpensesByUser.entrySet()) {
+            Long userId = entry.getKey();
+            BigDecimal amount = entry.getValue();
+            Integer count = generalPurchaseCountByUser.get(userId);
+            String name = userNames.get(userId);
+            System.out.println("   " + name + " (ID: " + userId + "): " + amount + " (" + count + " compras)");
+        }
+
+        // ========================================
+        // CREAR LISTA DE GASTOS GENERALES (solo los que tienen gastos)
+        // ========================================
+        List<TripStats.ParticipantExpense> generalParticipantExpenses = new ArrayList<>();
+
+        for (Map.Entry<Long, BigDecimal> entry : generalExpensesByUser.entrySet()) {
+            Long userId = entry.getKey();
+            BigDecimal amount = entry.getValue();
+
+            // Solo incluir usuarios que gastaron algo
+            if (amount.compareTo(BigDecimal.ZERO) > 0) {
+                TripStats.ParticipantExpense participantExpense = new TripStats.ParticipantExpense();
+                participantExpense.setUserId(userId);
+                participantExpense.setUserName(userNames.getOrDefault(userId, "Usuario desconocido"));
+                participantExpense.setTotalSpent(amount);
+                participantExpense.setExpenseCount(generalPurchaseCountByUser.getOrDefault(userId, 0));
+                generalParticipantExpenses.add(participantExpense);
+
+                System.out.println("✅ Agregado a resultados: " + participantExpense.getUserName() +
+                        " - " + participantExpense.getTotalSpent());
+            }
+        }
+
+        // Ordenar por gasto descendente
+        generalParticipantExpenses.sort((p1, p2) -> p2.getTotalSpent().compareTo(p1.getTotalSpent()));
+
+        System.out.println("\n📦 Total de participantes con gastos: " + generalParticipantExpenses.size());
+
+        stats.setExpensesByParticipant(generalParticipantExpenses);
+    }
+
+    /**
+     * Calcula los días más gastados de la billetera INDIVIDUAL del usuario
+     */
+    private void calculateTopIndividualExpensiveDays(Trip trip, Long userId, TripStats stats) {
+        // Obtener solo las compras INDIVIDUALES del usuario actual
+        List<Purchase> userIndividualPurchases = purchaseRepository.findByTripIdAndUserIdAndIsGeneralFalse(trip.getId(), userId);
+
+        if (userIndividualPurchases.isEmpty()) {
+            stats.setTopIndividualExpensiveDays(new ArrayList<>());
+            return;
+        }
+
+        // Agrupar compras individuales por fecha
+        Map<LocalDate, List<Purchase>> purchasesByDate = userIndividualPurchases.stream()
+                .filter(p -> p.getPurchaseDate() != null)
+                .collect(Collectors.groupingBy(Purchase::getPurchaseDate));
+
+        List<TripStats.DailyExpense> individualDailyExpenses = new ArrayList<>();
+
+        if (trip.getDateI() != null && trip.getDateF() != null) {
+            LocalDate currentDate = trip.getDateI();
+            int dayNumber = 1;
+
+            while (!currentDate.isAfter(trip.getDateF())) {
+                List<Purchase> dayPurchases = purchasesByDate.getOrDefault(currentDate, Collections.emptyList());
+
+                if (!dayPurchases.isEmpty()) { // Solo días con gastos
+                    BigDecimal dayTotal = dayPurchases.stream()
+                            .map(Purchase::getPrice)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    TripStats.DailyExpense dailyExpense = new TripStats.DailyExpense();
+                    dailyExpense.setDate(currentDate);
+                    dailyExpense.setDayNumber(dayNumber);
+                    dailyExpense.setTotalExpense(dayTotal);
+                    dailyExpense.setExpenseCount(dayPurchases.size());
+
+                    individualDailyExpenses.add(dailyExpense);
+                }
+
+                currentDate = currentDate.plusDays(1);
+                dayNumber++;
+            }
+        }
+
+        // Ordenar por gasto descendente y tomar top 5
+        List<TripStats.DailyExpense> topIndividualDays = individualDailyExpenses.stream()
+                .sorted((d1, d2) -> d2.getTotalExpense().compareTo(d1.getTotalExpense()))
+                .limit(5)
                 .collect(Collectors.toList());
 
-        stats.setExpensesByParticipant(participantExpenses);
+        stats.setTopIndividualExpensiveDays(topIndividualDays);
     }
 }
 
